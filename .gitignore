@@ -1,0 +1,17 @@
+.r31/
+.idea/
+.idea/*
+.DS_Store
+*.db
+*.sock
+build/
+r31suite.tar.gz
+releases/*
+releases/
+release-node/
+release-r31cli/
+release-r31s/
+*.sqlite3
+*.noderunner
+data.yml
+data/
