@@ -32,10 +32,16 @@ func main() {
 			Action: dbm.LoadCVEAction,
 		},
 		{
-			Name: "fix-cve",
-			Usage: "修复丢失的 CVE 数据(通过年份关键字)",
-			Flags: dbm.FixCVEDataFlags,
+			Name:   "fix-cve",
+			Usage:  "修复丢失的 CVE 数据(通过年份关键字)",
+			Flags:  dbm.FixCVEDataFlags,
 			Action: dbm.FixCVEDataAction,
+		},
+		{
+			Name: "download-exploit",
+			Usage: "下载 ExploitDB 中的数据",
+			Flags: fetcher.DownloadExploitDBFlags,
+			Action: fetcher.DownloadExploitDBAction,
 		},
 	}
 
