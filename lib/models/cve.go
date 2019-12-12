@@ -1,11 +1,117 @@
 package models
 
+import (
+	"encoding/json"
+	"github.com/jinzhu/gorm/dialects/postgres"
+	"github.com/pkg/errors"
+	"strings"
+	"time"
+)
+
+type CVEYearFile struct {
+	CVEDataType         string      `json:"CVE_data_type"`
+	CVEDataFormat       string      `json:"CVE_data_format"`
+	CVEDataVersion      string      `json:"CVE_data_version"`
+	CVEDataNumberOfCVEs string      `json:"CVE_data_numberOfCVEs"`
+	CVEDataTimestamp    string      `json:"CVE_data_timestamp"`
+	CVERecords          []CVERecord `json:"CVE_Items"`
+}
+
 type CVERecord struct {
 	Cve              Cve            `json:"cve"`
 	Configurations   Configurations `json:"configurations"`
 	Impact           Impact         `json:"impact"`
 	PublishedDate    string         `json:"publishedDate"`
 	LastModifiedDate string         `json:"lastModifiedDate"`
+}
+
+func (c *CVERecord) CVEId() string {
+	return c.Cve.CVEDataMeta.ID
+}
+
+func (c *CVERecord) CWE() string {
+	var cwe []string
+	for _, data := range c.Cve.Problemtype.ProblemtypeData {
+		for _, d := range data.Description {
+			if strings.HasPrefix(d.Value, "CWE-") {
+				cwe = append(cwe, d.Value)
+			}
+		}
+	}
+	return strings.Join(cwe, " | ")
+}
+
+func (c *CVERecord) ProblemTypeToJSONB() (postgres.Jsonb, error) {
+	data, err := json.Marshal(c.Cve.Problemtype)
+	if err != nil {
+		return postgres.Jsonb{}, errors.Errorf("marshal failed: %s", err)
+	}
+
+	return postgres.Jsonb{data}, nil
+}
+
+func (c *CVERecord) ReferencesToJSONB() (postgres.Jsonb, error) {
+	data, err := json.Marshal(c.Cve.References)
+	if err != nil {
+		return postgres.Jsonb{}, errors.Errorf("marshal failed: %s", err)
+	}
+
+	return postgres.Jsonb{data}, nil
+}
+
+func (c *CVERecord) DescriptionsToJSONB() (postgres.Jsonb, error) {
+	data, err := json.Marshal(c.Cve.DescriptionInfo)
+	if err != nil {
+		return postgres.Jsonb{}, errors.Errorf("marshal failed: %s", err)
+	}
+
+	return postgres.Jsonb{data}, nil
+}
+
+func (c *CVERecord) CPEConfigurationsToJSONB() (postgres.Jsonb, error) {
+	data, err := json.Marshal(c.Configurations)
+	if err != nil {
+		return postgres.Jsonb{}, errors.Errorf("marshal failed: %s", err)
+	}
+
+	return postgres.Jsonb{data}, nil
+}
+
+func (c *CVERecord) DescriptionMain() string {
+	datas := c.Cve.DescriptionInfo.DescriptionData
+	if len(datas) <= 0 {
+		return ""
+	} else if len(datas) == 1 {
+		return datas[0].Value
+	} else {
+		var (
+			currentLength int
+			currentData   string
+		)
+		for _, data := range datas {
+			if len(data.Value) > currentLength {
+				currentLength = len(data.Value)
+				currentData = data.Value
+			}
+		}
+		return currentData
+	}
+}
+
+func (c *CVERecord) GetPublishedDate() time.Time {
+	t, err := time.Parse("2006-01-02T15:04Z", c.PublishedDate)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
+}
+
+func (c *CVERecord) GetLastModifiedDate() time.Time {
+	t, err := time.Parse("2006-01-02T15:04Z", c.LastModifiedDate)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
 }
 
 type CVEDataMeta struct {
