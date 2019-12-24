@@ -170,6 +170,7 @@ type CpeMatch struct {
 type Nodes struct {
 	Operator string     `json:"operator"`
 	CpeMatch []CpeMatch `json:"cpe_match"`
+	Children []Nodes    `json:"children"`
 }
 
 type Configurations struct {

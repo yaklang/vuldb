@@ -38,10 +38,16 @@ func main() {
 			Action: dbm.FixCVEDataAction,
 		},
 		{
-			Name: "download-exploit",
-			Usage: "下载 ExploitDB 中的数据",
-			Flags: fetcher.DownloadExploitDBFlags,
+			Name:   "download-exploit",
+			Usage:  "下载 ExploitDB 中的数据",
+			Flags:  fetcher.DownloadExploitDBFlags,
 			Action: fetcher.DownloadExploitDBAction,
+		},
+		{
+			Name:   "cpe2cve",
+			Usage:  "通过 CPE 查询 CVE",
+			Flags:  dbm.QueryCPEToCVEFlags,
+			Action: dbm.QueryCPEToCVEAction,
 		},
 	}
 

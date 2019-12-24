@@ -1,12 +1,15 @@
 package dbm
 
 import (
+	"encoding/json"
+	"fmt"
 	"github.com/jinzhu/gorm"
 	"github.com/jinzhu/gorm/dialects/postgres"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"time"
 	"vuldb/lib/models"
+	"vuldb/utils"
 )
 
 type CVE struct {
@@ -58,6 +61,33 @@ type CVE struct {
 
 	PublishedDate    time.Time
 	LastModifiedData time.Time
+}
+
+func (c *CVE) ValidateCPE(cpe string) (bool, error) {
+	data, err := c.CPEConfigurations.MarshalJSON()
+	if err != nil {
+		return false, errors.Errorf("%v marshal json failed: %v", c.CVE, err)
+	}
+
+	var config models.Configurations
+	err = json.Unmarshal(data, &config)
+	if err != nil {
+		return false, errors.Errorf("%v convert to configuration failed: %v", c.CVE, err)
+	}
+
+	if ok, err := config.ValidateCPE(cpe); ok {
+		return true, nil
+	} else {
+		if utils.InDebugMode() {
+			data, e := json.MarshalIndent(config, c.CVE, "    ")
+			if e != nil {
+				logrus.Error(e)
+			} else {
+				logrus.Info(string(data))
+			}
+		}
+		return false, err
+	}
 }
 
 func (m *Manager) SaveCVERecord(r *models.CVERecord) error {
@@ -126,4 +156,36 @@ func (m *Manager) SaveCVERecord(r *models.CVERecord) error {
 		return errors.Errorf("save cve %s failed: %s", cve.CVE, err)
 	}
 	return nil
+}
+
+func (m *Manager) QueryByCPE(cpe string) ([]*CVE, error) {
+	db := m.DB
+
+	s, err := models.ParseCPEStringToStruct(cpe)
+	if err != nil {
+		return nil, errors.Errorf("parse cpe failed: %v", err)
+	}
+
+	var cves []*CVE
+	if db := db.Where(
+		"cpe_configurations->>'nodes' LIKE ?",
+		fmt.Sprintf("%%%v%%", s.CPE23String()),
+	).Find(&cves); db.Error != nil {
+		return nil, errors.Errorf("query cve by cpe failed: %v", db.Error)
+	}
+
+	var results []*CVE
+	for _, cve := range cves {
+		if ok, err := cve.ValidateCPE(cpe); ok {
+			results = append(results, cve)
+		} else {
+			if err != nil {
+				logrus.Errorf("CVE: %v failed: %v", cve.CVE, err)
+			}
+		}
+	}
+
+	logrus.Infof("found raw cve: %v valid cve: %v", len(cves), len(results))
+
+	return results, nil
 }
