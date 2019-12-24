@@ -86,7 +86,6 @@ func (c *cpeStruct) Regexp() (*regexp.Regexp, error) {
 
 	result = append(result, orAny(c.Vendor))
 	result = append(result, orAny(c.Product))
-	result = append(result, orAny(c.Version))
 
 	buf := `(cpe:\d\.\d:|cpe:\/)` + strings.Join(result, ":")
 
@@ -108,6 +107,7 @@ func (c *cpeStruct) Regexp() (*regexp.Regexp, error) {
 
 	result = []string{}
 
+	result = append(result, genNextBuf(c.Version))
 	result = append(result, genNextBuf(c.Update))
 	result = append(result, genNextBuf(c.Edition))
 	result = append(result, genNextBuf(c.Language))
