@@ -79,12 +79,12 @@ func (c *CVE) ValidateCPE(cpe string) (bool, error) {
 		return true, nil
 	} else {
 		if utils.InDebugMode() {
-			data, e := json.MarshalIndent(config, c.CVE, "    ")
-			if e != nil {
-				logrus.Error(e)
-			} else {
-				logrus.Info(string(data))
-			}
+			//data, e := json.MarshalIndent(config, c.CVE, "    ")
+			//if e != nil {
+			//	logrus.Error(e)
+			//} else {
+			//	logrus.Info(string(data))
+			//}
 		}
 		return false, err
 	}

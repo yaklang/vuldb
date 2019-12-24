@@ -1,12 +1,10 @@
 package models
 
 import (
-	"github.com/davecgh/go-spew/spew"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"regexp"
 	"strings"
-	"vuldb/utils"
 )
 
 type cpeStruct struct {
@@ -191,10 +189,6 @@ func (c *Configurations) ValidateCPE(cpe string) (bool, error) {
 func (n *Nodes) Validate(h func(t string) bool) bool {
 	switch n.Operator {
 	case "AND", "And", "and":
-		if utils.InDebugMode() {
-			spew.Dump(n.Children)
-		}
-
 		for _, subNode := range n.Children {
 			if !subNode.Validate(h) {
 				return false
