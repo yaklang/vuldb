@@ -3,7 +3,7 @@ package models
 import (
 	"fmt"
 	"github.com/pkg/errors"
-	"strings"
+	"sort"
 )
 
 type VersionTreeNodeIf interface {
@@ -18,7 +18,7 @@ type VersionTree struct {
 	VersionTreeNodeIf
 
 	//nodes []*VersionCharNode
-
+	prefix   string
 	origin   []string
 	children []*VersionCharNode
 }
@@ -55,6 +55,8 @@ type VersionCharNode struct {
 
 	parent   VersionTreeNodeIf
 	children []*VersionCharNode
+
+	showAsNode bool
 }
 
 func (v *VersionCharNode) GetChild(a byte) (*VersionCharNode, error) {
@@ -87,21 +89,44 @@ func (v *VersionCharNode) IsLeaf() bool {
 	return len(v.children) <= 0
 }
 
-func (v *VersionCharNode) NextString() string {
+func (v *VersionCharNode) NextString() []string {
 	if v.IsLeaf() {
-		return fmt.Sprintf("%v", string(v.value))
+		return []string{fmt.Sprintf("%v", string(v.value))}
 	}
+
+	var results []string
 
 	var sub []string
 	for _, c := range v.children {
-		sub = append(sub, c.NextString())
+		if c.IsLeaf() {
+			sub = append(sub, string(c.value))
+		}
+
+		if !c.IsLeaf() && c.showAsNode {
+			sub = append(sub, string(c.value))
+		}
 	}
 
-	if len(sub) > 1 {
-		return fmt.Sprintf("%v[%v]", string(v.value), strings.Join(sub, "/"))
-	} else {
-		return fmt.Sprintf("%v%v", string(v.value), strings.Join(sub, "/"))
+	compactChars := func(sl []string) string {
+		sort.Strings(sl)
+		if len(sl) > 1 {
+			return fmt.Sprintf("%v-%v", sl[0], sl[len(sl)-1])
+		} else if len(sl) == 1 {
+			return fmt.Sprintf("%v", sl[0])
+		} else {
+			return "*"
+		}
 	}
+
+	var buf string
+	if len(sub) > 1 {
+		buf = fmt.Sprintf("%v[%v]", string(v.value), compactChars(sub))
+	} else {
+		buf = fmt.Sprintf("%v%v", string(v.value), compactChars(sub))
+	}
+
+	results = append(results, buf)
+	return results
 }
 
 func (v *VersionCharNode) PathString() string {
@@ -131,16 +156,21 @@ func (v *VersionCharNode) HaveLeaf() bool {
 }
 
 func (v *VersionCharNode) Versions() []string {
-	var haveLeaf []*VersionCharNode
+	var (
+		haveLeaf []*VersionCharNode
+	)
 	v.walk(func(n *VersionCharNode) {
 		if n.HaveLeaf() {
 			haveLeaf = append(haveLeaf, n)
+			return
 		}
 	})
 
 	var s []string
 	for _, y := range haveLeaf {
-		s = append(s, fmt.Sprintf("%v%v", y.PathString(), y.NextString()))
+		for _, nextVersion := range y.NextString() {
+			s = append(s, fmt.Sprintf("%v%v", y.PathString(), nextVersion))
+		}
 	}
 	return s
 }
@@ -159,6 +189,7 @@ func (v *VersionCharNode) walk(h func(n *VersionCharNode)) {
 
 func (v *VersionTree) init() {
 	var parent VersionTreeNodeIf
+	var current *VersionCharNode
 	for _, ver := range v.origin {
 		parent = v
 		for _, c := range []byte(ver) {
@@ -168,33 +199,39 @@ func (v *VersionTree) init() {
 					parent: parent,
 				}
 				parent.AddChild(p)
+				current = p
 				//v.nodes = append(v.nodes, p)
 				parent = p
 			} else {
 				parent = node
 			}
 		}
+		if current != nil {
+			current.showAsNode = true
+		}
 	}
 }
 
-func NewVersionTree(version ...string) *VersionTree {
+func NewVersionTree(prefix string, version ...string) *VersionTree {
 	tree := &VersionTree{
 		origin: version,
+		prefix: prefix,
 	}
 	tree.init()
 
 	return tree
 }
 
-func (v *VersionTree) String() string {
+func (v *VersionTree) Strings() []string {
 	var s []string
 	for _, c := range v.children {
 		if c.IsLeaf() {
-			s = append(s, c.PathString()+string(c.value))
+			s = append(s, fmt.Sprintf("%v%v", v.prefix, c.PathString()+string(c.value)))
 		} else {
-			s = append(s, c.Versions()...)
+			for _, version := range c.Versions() {
+				s = append(s, fmt.Sprintf("%v%v", v.prefix, version))
+			}
 		}
 	}
-
-	return strings.Join(s, "/")
+	return s
 }

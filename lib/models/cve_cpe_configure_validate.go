@@ -67,6 +67,61 @@ func (c *cpeStruct) CPE23String() string {
 	return "cpe:2.3:" + strings.Join(result, ":")
 }
 
+func (c *cpeStruct) ToLikeSearch() string {
+	orStr := func(s string, defaultValue string) string {
+		if s == "" {
+			return defaultValue
+		}
+		return s
+	}
+
+	orWildchard := func(s string) string {
+		return orStr(s, "%")
+	}
+
+	var result []string
+
+	result = append(result, orStr(c.Part, "a"))
+	result = append(result, orWildchard(c.Vendor))
+	result = append(result, orWildchard(c.Product))
+
+	result = append(result, orWildchard(strings.ReplaceAll(c.Version, "*", "")))
+
+	result = append(result, orWildchard(c.Update))
+	result = append(result, orWildchard(c.Edition))
+	result = append(result, orWildchard(c.Language))
+	result = append(result, orWildchard(c.Ext1))
+	result = append(result, orWildchard(c.Ext2))
+	result = append(result, orWildchard(c.Ext3))
+	result = append(result, orWildchard(c.Ext4))
+
+	var ne []string
+	var lastIsPercent bool
+	for _, r := range result {
+		if r == "%" {
+			if lastIsPercent {
+				continue
+			}
+			ne = append(ne, r)
+			lastIsPercent = true
+		} else {
+			ne = append(ne, r)
+			lastIsPercent = false
+		}
+	}
+
+	buf := "%cpe:2.3:" + strings.Join(ne, ":")
+
+	if strings.HasSuffix(buf, "%") {
+		if strings.HasSuffix(buf, ":%") {
+			return buf[:len(buf)-2] + "%"
+		}
+		return buf
+	} else {
+		return buf + "%"
+	}
+}
+
 func (c *cpeStruct) Regexp() (*regexp.Regexp, error) {
 	data := func(s string) string {
 		return regexp.QuoteMeta(s)
@@ -81,17 +136,12 @@ func (c *cpeStruct) Regexp() (*regexp.Regexp, error) {
 
 	var result []string
 
-	block := "([^:]+|*)"
+	block := `([^:]+|\*)`
 	result = append(result, orStr(c.Part, "a"))
 
 	orAny := func(s string) string {
 		return orStr(s, block)
 	}
-
-	result = append(result, orAny(c.Vendor))
-	result = append(result, orAny(c.Product))
-
-	buf := `(cpe:\d\.\d:|cpe:\/)` + strings.Join(result, ":")
 
 	// available options
 	orAnyOrNull := func(s string) (_ string, isEmpty bool) {
@@ -109,9 +159,27 @@ func (c *cpeStruct) Regexp() (*regexp.Regexp, error) {
 		}
 	}
 
+	result = append(result, orAny(c.Vendor))
+	result = append(result, orAny(c.Product))
+
+	buf := `(cpe:\d\.\d:|cpe:\/)` + strings.Join(result, ":")
+
 	result = []string{}
 
-	result = append(result, genNextBuf(c.Version))
+	var (
+		ver   = c.Version
+		verRe = false
+	)
+	if strings.Contains(c.Version, "*") {
+		ver = strings.ReplaceAll(c.Version, "*", "[^:]*")
+		verRe = true
+	}
+
+	if verRe {
+		result = append(result, ver)
+	} else {
+		result = append(result, genNextBuf(ver))
+	}
 	result = append(result, genNextBuf(c.Update))
 	result = append(result, genNextBuf(c.Edition))
 	result = append(result, genNextBuf(c.Language))
@@ -122,7 +190,8 @@ func (c *cpeStruct) Regexp() (*regexp.Regexp, error) {
 
 	_ = buf
 	raw := buf + ":?" + strings.Join(result, ":?")
-	return regexp.Compile(raw)
+	re, err := regexp.Compile(raw)
+	return re, err
 }
 
 func ParseCPEStringToStruct(cpe string) (*cpeStruct, error) {
@@ -178,9 +247,27 @@ func (n *Nodes) Validate(h func(t string) bool) bool {
 			return false
 		}
 	case "OR", "or", "Or":
+		allFalse := true
 		for _, m := range n.CpeMatch {
-			if m.Vulnerable && h(m.Cpe23URI) {
+			res := h(m.Cpe23URI)
+			if res {
+				if !m.Vulnerable {
+					return false
+				} else {
+					return true
+				}
+			}
+
+			if m.Vulnerable {
+				allFalse = false
+			}
+		}
+
+		if len(n.CpeMatch) > 0 {
+			if allFalse {
 				return true
+			} else {
+				return false
 			}
 		}
 	}

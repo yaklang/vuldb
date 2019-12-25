@@ -255,9 +255,13 @@ func (m *Manager) QueryByCPEsWithOptions(option CPEFilter, cpes ...string) (know
 		}
 
 		var cves []*CVE
+		r := s.ToLikeSearch()
+		if utils.InDebugMode() {
+			logrus.Infof("Like: %v", r)
+		}
 		if db := db.Where(
 			"cpe_configurations->>'nodes' LIKE ?",
-			fmt.Sprintf("%%%v%%", s.CPE23String()),
+			r,
 		).Find(&cves); db.Error != nil {
 			return nil, nil, errors.Errorf("query cve by cpe failed: %v", db.Error)
 		}

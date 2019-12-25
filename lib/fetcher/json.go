@@ -81,7 +81,7 @@ func ReDownloadCVEDataByKeyword(dir, kw string) (map[string]string, error) {
 		}()
 	}
 	swg.Wait()
-	
+
 	return result, nil
 }
 

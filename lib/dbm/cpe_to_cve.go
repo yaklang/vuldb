@@ -38,7 +38,7 @@ var (
 			if err != nil {
 				continue
 			}
-			logrus.Infof("      %v", s)
+			logrus.Infof("%v vuln configurations: \n\n%v\n\n", cve.CVE.CVE, s)
 		}
 
 		fmt.Println()
@@ -49,7 +49,7 @@ var (
 			if err != nil {
 				continue
 			}
-			logrus.Infof("      %v", s)
+			logrus.Infof("%v vuln configurations: \n\n%v\n\n", cve.CVE.CVE, s)
 		}
 
 		return nil

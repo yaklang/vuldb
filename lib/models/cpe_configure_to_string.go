@@ -6,21 +6,15 @@ import (
 )
 
 func (c *Configurations) ToHumanReadableString() string {
+	return c.ShowShorter()
+}
+
+func (c *Configurations) ShowShorter() string {
 	var r []string
 	for _, n := range c.Nodes {
 		r = append(r, n.ToHumanReadableString())
 	}
-
-	var results []string
-	if len(r) > 1 {
-		for _, res := range r {
-			results = append(results, fmt.Sprintf("(%v)", res))
-		}
-	} else {
-		results = r[:]
-	}
-
-	return strings.Join(results, " or ")
+	return strings.Join(r, "\r\n")
 }
 
 type cpeCluster struct {
@@ -28,9 +22,9 @@ type cpeCluster struct {
 	versions []string
 }
 
-func (c *cpeCluster) CompactVersions() string {
-	tree := NewVersionTree(c.versions...)
-	return tree.String()
+func (c *cpeCluster) CompactVersions() []string {
+	tree := NewVersionTree("", c.versions...)
+	return tree.Strings()
 }
 
 func (n *Nodes) ToHumanReadableString() string {
@@ -71,13 +65,18 @@ func (n *Nodes) ToHumanReadableString() string {
 		}
 
 		var s []string
-		for product, clusterCPE := range table {
-			s = append(s, fmt.Sprintf("%v:%v", product, clusterCPE.CompactVersions()))
+		for _, clusterCPE := range table {
+			raw := fmt.Sprintf("[%v]%v: {{%v}}",
+				clusterCPE.c.Vendor, strings.Title(strings.ReplaceAll(clusterCPE.c.Product, "_", " ")),
+				strings.Join(clusterCPE.CompactVersions(), ", "))
+			s = append(s, raw)
 		}
 
 		var ret []string
 		if len(s) > 1 {
 			ret = append(ret, fmt.Sprintf("(%v)", s))
+		} else {
+			ret = s
 		}
 		return strings.Join(ret, " or ")
 	}
