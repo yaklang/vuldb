@@ -7,9 +7,21 @@ import (
 	"github.com/jinzhu/gorm/dialects/postgres"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"strings"
 	"time"
 	"vuldb/lib/models"
 	"vuldb/utils"
+)
+
+type CPEFilter string
+
+const (
+	CPE_Filter_Default          CPEFilter = ""
+	CPE_Filter_MustHaveCPEPartA           = CPE_Filter_Default
+	CPE_Filter_AllTypeCPEPart   CPEFilter = "*"
+	CPE_Filter_OnlyCPEPartA     CPEFilter = "a"
+	CPE_Filter_OnlyCPEPartH     CPEFilter = "h"
+	CPE_Filter_OnlyCPEPartO     CPEFilter = "o"
 )
 
 type CVE struct {
@@ -63,30 +75,99 @@ type CVE struct {
 	LastModifiedData time.Time
 }
 
-func (c *CVE) ValidateCPE(cpe string) (bool, error) {
+type CVEResult struct {
+	CVE           *CVE
+	AvailableCPEs []string
+}
+
+func (c *CVE) FitCPEs(option CPEFilter, cpes ...string) (*CVEResult, bool) {
+	result := &CVEResult{
+		CVE:           c,
+		AvailableCPEs: cpes,
+	}
+	switch option {
+	case CPE_Filter_MustHaveCPEPartA:
+		return result, c.HaveCPEPartA(cpes...)
+	case CPE_Filter_AllTypeCPEPart:
+		return result, true
+	case CPE_Filter_OnlyCPEPartA:
+		return result, c.HaveCPEPartA(cpes...) && !c.HaveCPEPartH(cpes...) && !c.HaveCPEPartO(cpes...)
+	case CPE_Filter_OnlyCPEPartH:
+		return result, !c.HaveCPEPartA(cpes...) && c.HaveCPEPartH(cpes...) && !c.HaveCPEPartO(cpes...)
+	case CPE_Filter_OnlyCPEPartO:
+		return result, !c.HaveCPEPartA(cpes...) && !c.HaveCPEPartH(cpes...) && c.HaveCPEPartO(cpes...)
+	default:
+		return result, (c.HaveCPEPartA(cpes...) && strings.Contains(string(option), "a")) ||
+			(c.HaveCPEPartO(cpes...) && strings.Contains(string(option), "o")) ||
+			(c.HaveCPEPartH(cpes...) && strings.Contains(string(option), "h"))
+	}
+}
+
+func cpeHavePart(s string, flag string) bool {
+	sub1, sub2 := fmt.Sprintf("cpe:2.3:%v", flag), fmt.Sprintf("cpe:/%v", flag)
+	return strings.HasPrefix(s, sub1) || strings.HasPrefix(s, sub2)
+}
+
+func (c *CVE) HaveCPEPartA(cpes ...string) bool {
+	return c.HaveCPEPart("a", cpes...)
+}
+
+func (c *CVE) HaveCPEPartH(cpes ...string) bool {
+	return c.HaveCPEPart("h", cpes...)
+}
+
+func (c *CVE) HaveCPEPartO(cpes ...string) bool {
+	return c.HaveCPEPart("o", cpes...)
+}
+
+func (c *CVE) HaveCPEPart(flag string, cpes ...string) bool {
+	for _, c := range cpes {
+		if cpeHavePart(c, flag) {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *CVE) CPEHumanReadableString() (string, error) {
 	data, err := c.CPEConfigurations.MarshalJSON()
 	if err != nil {
-		return false, errors.Errorf("%v marshal json failed: %v", c.CVE, err)
+		return "", errors.Errorf("%v marshal json failed: %v", c.CVE, err)
 	}
 
 	var config models.Configurations
 	err = json.Unmarshal(data, &config)
 	if err != nil {
-		return false, errors.Errorf("%v convert to configuration failed: %v", c.CVE, err)
+		return "", errors.Errorf("%v convert to configuration failed: %v", c.CVE, err)
 	}
 
-	if ok, err := config.ValidateCPE(cpe); ok {
-		return true, nil
+	return config.ToHumanReadableString(), nil
+}
+
+func (c *CVE) ValidateCPE(cpes ...string) (ok bool, availableCPE []string, _ error) {
+	data, err := c.CPEConfigurations.MarshalJSON()
+	if err != nil {
+		return false, nil, errors.Errorf("%v marshal json failed: %v", c.CVE, err)
+	}
+
+	var config models.Configurations
+	err = json.Unmarshal(data, &config)
+	if err != nil {
+		return false, nil, errors.Errorf("%v convert to configuration failed: %v", c.CVE, err)
+	}
+
+	if ok, availableCPE, err := config.ValidateCPE(cpes...); ok {
+		return true, availableCPE, nil
 	} else {
 		if utils.InDebugMode() {
-			//data, e := json.MarshalIndent(config, c.CVE, "    ")
-			//if e != nil {
-			//	logrus.Error(e)
-			//} else {
-			//	logrus.Info(string(data))
-			//}
+			data, e := json.MarshalIndent(config, c.CVE, "    ")
+			if e != nil {
+				logrus.Error(e)
+			} else {
+				logrus.Info(string(data))
+			}
 		}
-		return false, err
+		return false, nil, err
 	}
 }
 
@@ -158,34 +239,53 @@ func (m *Manager) SaveCVERecord(r *models.CVERecord) error {
 	return nil
 }
 
-func (m *Manager) QueryByCPE(cpe string) ([]*CVE, error) {
+func (m *Manager) QueryByCPEs(cpes ...string) (known, unverified []*CVEResult, _ error) {
+	return m.QueryByCPEsWithOptions(CPE_Filter_Default, cpes...)
+}
+
+func (m *Manager) QueryByCPEsWithOptions(option CPEFilter, cpes ...string) (known, unverified []*CVEResult, _ error) {
 	db := m.DB
 
-	s, err := models.ParseCPEStringToStruct(cpe)
-	if err != nil {
-		return nil, errors.Errorf("parse cpe failed: %v", err)
+	var allCves []*CVE
+
+	for _, cpe := range cpes {
+		s, err := models.ParseCPEStringToStruct(cpe)
+		if err != nil {
+			return nil, nil, errors.Errorf("parse cpe failed: %v", err)
+		}
+
+		var cves []*CVE
+		if db := db.Where(
+			"cpe_configurations->>'nodes' LIKE ?",
+			fmt.Sprintf("%%%v%%", s.CPE23String()),
+		).Find(&cves); db.Error != nil {
+			return nil, nil, errors.Errorf("query cve by cpe failed: %v", db.Error)
+		}
+
+		allCves = append(allCves, cves...)
 	}
 
-	var cves []*CVE
-	if db := db.Where(
-		"cpe_configurations->>'nodes' LIKE ?",
-		fmt.Sprintf("%%%v%%", s.CPE23String()),
-	).Find(&cves); db.Error != nil {
-		return nil, errors.Errorf("query cve by cpe failed: %v", db.Error)
-	}
-
-	var results []*CVE
-	for _, cve := range cves {
-		if ok, err := cve.ValidateCPE(cpe); ok {
-			results = append(results, cve)
+	var (
+		positiveResults []*CVEResult
+		negativeResults []*CVEResult
+	)
+	for _, cve := range allCves {
+		if ok, availableCPE, err := cve.ValidateCPE(cpes...); ok {
+			if r, available := cve.FitCPEs(option, availableCPE...); available {
+				positiveResults = append(positiveResults, r)
+			}
 		} else {
 			if err != nil {
 				logrus.Errorf("CVE: %v failed: %v", cve.CVE, err)
 			}
+
+			if r, available := cve.FitCPEs(option, availableCPE...); available {
+				negativeResults = append(negativeResults, r)
+			}
 		}
 	}
 
-	logrus.Infof("found raw cve: %v valid cve: %v", len(cves), len(results))
+	logrus.Infof("found raw cve: %v valid cve: %v", len(allCves), len(positiveResults))
 
-	return results, nil
+	return positiveResults, negativeResults, nil
 }

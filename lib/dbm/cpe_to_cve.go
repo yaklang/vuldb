@@ -1,6 +1,7 @@
 package dbm
 
 import (
+	"fmt"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -8,27 +9,47 @@ import (
 
 var (
 	QueryCPEToCVEFlags = []cli.Flag{
-		cli.StringFlag{
+		cli.StringSliceFlag{
 			Name:  "cpe,c",
-			Value: "CPE 样例",
+			Usage: "需要对哪些 cpe 进行搜索？",
+		},
+		cli.StringFlag{
+			Name:  "part,p",
+			Usage: "cpe part filter ('a' for must-have-a, '*' for ignore, a/h/o for filter) ",
 		},
 	}
 
 	QueryCPEToCVEAction = func(c *cli.Context) error {
-		cpe := c.String("cpe")
+		cpes := c.StringSlice("cpe")
 
 		m, err := NewDBManager()
 		if err != nil {
 			return errors.Errorf("build dbm failed: %v", err)
 		}
 
-		cves, err := m.QueryByCPE(cpe)
+		verified, unverified, err := m.QueryByCPEsWithOptions(CPEFilter(c.String("part")), cpes...)
 		if err != nil {
 			return errors.Errorf("query cpe failed: %v", err)
 		}
 
-		for _, cve := range cves {
-			logrus.Infof("found cve: %v", cve.CVE)
+		for _, cve := range verified {
+			logrus.Infof("found cve: %20s cpe: %v", cve.CVE.CVE, cve.AvailableCPEs)
+			s, err := cve.CVE.CPEHumanReadableString()
+			if err != nil {
+				continue
+			}
+			logrus.Infof("      %v", s)
+		}
+
+		fmt.Println()
+
+		for _, cve := range unverified {
+			logrus.Infof("unverified cve: %20s cpe: %v", cve.CVE.CVE, cve.AvailableCPEs)
+			s, err := cve.CVE.CPEHumanReadableString()
+			if err != nil {
+				continue
+			}
+			logrus.Infof("      %v", s)
 		}
 
 		return nil

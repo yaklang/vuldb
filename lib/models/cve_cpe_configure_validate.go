@@ -1,8 +1,8 @@
 package models
 
 import (
+	"fmt"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"regexp"
 	"strings"
 )
@@ -13,6 +13,10 @@ type cpeStruct struct {
 
 	// for default
 	Ext1, Ext2, Ext3, Ext4 string
+}
+
+func (c *cpeStruct) ProductCPE23() string {
+	return fmt.Sprintf("cpe:2.3:%v:%v:%v", c.Part, c.Vendor, c.Product)
 }
 
 func newCPEStruct(a []string) (*cpeStruct, error) {
@@ -149,41 +153,14 @@ func ParseCPEStringToStruct(cpe string) (*cpeStruct, error) {
 	return cpeIns, nil
 }
 
-func (c *Configurations) ValidateCPE(cpe string) (bool, error) {
-	cpeIns, err := ParseCPEStringToStruct(cpe)
-	if err != nil {
-		return false, err
-	}
-
-	var (
-		r *regexp.Regexp
-		s string
-	)
-	r, err = cpeIns.Regexp()
-	if err != nil {
-		logrus.Errorf("build cpe regexp failed: %v", err)
-		s = cpeIns.CPE23String()
-	}
-
-	if r == nil && s == "" {
-		return false, errors.Errorf("parse cpe regexp/string failed: %v", cpe)
-	}
-
+func (c *Configurations) ValidateCPE(cpes ...string) (bool, []string, error) {
 	for _, n := range c.Nodes {
-		if r != nil {
-			if n.ValidateRegexp(r) {
-				return true, nil
-			}
-		}
-
-		if s != "" {
-			if n.ValidateString(s) {
-				return true, nil
-			}
+		if ok, cpes := n.ValidateCPEs(cpes...); ok {
+			return true, cpes, nil
 		}
 	}
 
-	return false, nil
+	return false, nil, nil
 }
 
 func (n *Nodes) Validate(h func(t string) bool) bool {
@@ -208,6 +185,57 @@ func (n *Nodes) Validate(h func(t string) bool) bool {
 		}
 	}
 	return false
+}
+
+func (n *Nodes) ValidateCPEs(cpes ...string) (bool, []string) {
+	type resource struct {
+		r   *regexp.Regexp
+		cpe string
+	}
+	var (
+		res []*resource
+		s   []string
+	)
+
+	for _, cpe := range cpes {
+		ins, err := ParseCPEStringToStruct(cpe)
+		if err != nil {
+			s = append(s, cpe)
+			continue
+		}
+
+		r, err := ins.Regexp()
+		if err != nil {
+			s = append(s, ins.CPE23String())
+			continue
+		}
+
+		res = append(res, &resource{
+			r:   r,
+			cpe: cpe,
+		})
+	}
+
+	var availableCPE []string
+	result := n.Validate(func(t string) bool {
+		for _, r := range res {
+			if r.r.MatchString(t) {
+				availableCPE = append(availableCPE, t)
+				return true
+			}
+		}
+
+		for _, sub := range s {
+			if sub == t {
+				availableCPE = append(availableCPE, sub)
+				return true
+			}
+		}
+
+		return false
+	})
+
+	return result, availableCPE
 }
 
 func (n *Nodes) ValidateRegexp(r *regexp.Regexp) bool {
