@@ -219,7 +219,6 @@ type CvssV3 struct {
 
 type BaseMetricV3 struct {
 	CvssV3                  CvssV3  `json:"cvssV3"`
-	Severity                string  `json:"baseSeverity"`
 	ExploitabilityScore     float64 `json:"exploitabilityScore"`
 	ImpactScore             float64 `json:"impactScore"`
 	ObtainAllPrivilege      bool    `json:"obtainAllPrivilege"`

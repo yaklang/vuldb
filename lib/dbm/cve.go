@@ -224,7 +224,7 @@ func (m *Manager) SaveCVERecord(r *models.CVERecord) error {
 			IntegrityImpact:         cvss.IntegrityImpact,
 			AvailabilityImpact:      cvss.AvailabilityImpact,
 			BaseCVSSv2Score:         cvss.BaseScore,
-			Severity:                matrix.Severity,
+			Severity:                cvss.BaseSeverity,
 			ExploitabilityScore:     matrix.ExploitabilityScore,
 			ImpactScore:             matrix.ImpactScore,
 			ObtainAllPrivilege:      matrix.ObtainAllPrivilege,

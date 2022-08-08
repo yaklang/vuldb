@@ -2,13 +2,14 @@ package dbm
 
 import (
 	"encoding/json"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
-	"github.com/urfave/cli"
 	"io/ioutil"
 	"path"
 	"vuldb/lib/fetcher"
 	"vuldb/lib/models"
+
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"github.com/urfave/cli"
 )
 
 var LoadCVEFlags = []cli.Flag{
