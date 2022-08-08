@@ -3,14 +3,15 @@ package dbm
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/jinzhu/gorm"
-	"github.com/jinzhu/gorm/dialects/postgres"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"strings"
 	"time"
 	"vuldb/lib/models"
 	"vuldb/utils"
+
+	"github.com/jinzhu/gorm"
+	"github.com/jinzhu/gorm/dialects/postgres"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 type CPEFilter string
@@ -191,9 +192,7 @@ func (m *Manager) SaveCVERecord(r *models.CVERecord) error {
 	if err != nil {
 		logrus.Errorf("configuration failed: %s", err)
 	}
-
-	matrix := r.Impact.BaseMetricV2
-	cvss := matrix.CvssV2
+	var cve *CVE
 
 	pubdate := r.GetPublishedDate()
 	if pubdate.IsZero() {
@@ -205,32 +204,67 @@ func (m *Manager) SaveCVERecord(r *models.CVERecord) error {
 		logrus.Warnf("invalid data for %v", r.LastModifiedDate)
 	}
 
-	cve := &CVE{
-		CVE:                     r.CVEId(),
-		CWE:                     r.CWE(),
-		ProblemType:             problemType,
-		References:              references,
-		DescriptionMain:         r.DescriptionMain(),
-		Descriptions:            descs,
-		CPEConfigurations:       configs,
-		CVSSVersion:             cvss.Version,
-		CVSSVectorString:        cvss.VectorString,
-		AccessVector:            cvss.AccessVector,
-		AccessComplexity:        cvss.AccessComplexity,
-		Authentication:          cvss.Authentication,
-		ConfidentialityImpact:   cvss.ConfidentialityImpact,
-		IntegrityImpact:         cvss.IntegrityImpact,
-		AvailabilityImpact:      cvss.AvailabilityImpact,
-		BaseCVSSv2Score:         cvss.BaseScore,
-		Severity:                matrix.Severity,
-		ExploitabilityScore:     matrix.ExploitabilityScore,
-		ImpactScore:             matrix.ImpactScore,
-		ObtainAllPrivilege:      matrix.ObtainAllPrivilege,
-		ObtainUserPrivilege:     matrix.ObtainUserPrivilege,
-		ObtainOtherPrivilege:    matrix.ObtainOtherPrivilege,
-		UserInteractionRequired: matrix.UserInteractionRequired,
-		PublishedDate:           pubdate,
-		LastModifiedData:        lastModifiedDate,
+	if r.Impact.BaseMetricV2.CvssV2.Version == "" {
+		matrix := r.Impact.BaseMetricV3
+		cvss := matrix.CvssV3
+		cve = &CVE{
+			CVE:                     r.CVEId(),
+			CWE:                     r.CWE(),
+			ProblemType:             problemType,
+			References:              references,
+			DescriptionMain:         r.DescriptionMain(),
+			Descriptions:            descs,
+			CPEConfigurations:       configs,
+			CVSSVersion:             cvss.Version,
+			CVSSVectorString:        cvss.VectorString,
+			AccessVector:            cvss.AttackVector,
+			AccessComplexity:        cvss.AttackComplexity,
+			Authentication:          "",
+			ConfidentialityImpact:   cvss.ConfidentialityImpact,
+			IntegrityImpact:         cvss.IntegrityImpact,
+			AvailabilityImpact:      cvss.AvailabilityImpact,
+			BaseCVSSv2Score:         cvss.BaseScore,
+			Severity:                matrix.Severity,
+			ExploitabilityScore:     matrix.ExploitabilityScore,
+			ImpactScore:             matrix.ImpactScore,
+			ObtainAllPrivilege:      matrix.ObtainAllPrivilege,
+			ObtainUserPrivilege:     matrix.ObtainUserPrivilege,
+			ObtainOtherPrivilege:    matrix.ObtainOtherPrivilege,
+			UserInteractionRequired: matrix.UserInteractionRequired,
+			PublishedDate:           pubdate,
+			LastModifiedData:        lastModifiedDate,
+		}
+
+	} else {
+		matrix := r.Impact.BaseMetricV2
+		cvss := matrix.CvssV2
+		cve = &CVE{
+			CVE:                     r.CVEId(),
+			CWE:                     r.CWE(),
+			ProblemType:             problemType,
+			References:              references,
+			DescriptionMain:         r.DescriptionMain(),
+			Descriptions:            descs,
+			CPEConfigurations:       configs,
+			CVSSVersion:             cvss.Version,
+			CVSSVectorString:        cvss.VectorString,
+			AccessVector:            cvss.AccessVector,
+			AccessComplexity:        cvss.AccessComplexity,
+			Authentication:          cvss.Authentication,
+			ConfidentialityImpact:   cvss.ConfidentialityImpact,
+			IntegrityImpact:         cvss.IntegrityImpact,
+			AvailabilityImpact:      cvss.AvailabilityImpact,
+			BaseCVSSv2Score:         cvss.BaseScore,
+			Severity:                matrix.Severity,
+			ExploitabilityScore:     matrix.ExploitabilityScore,
+			ImpactScore:             matrix.ImpactScore,
+			ObtainAllPrivilege:      matrix.ObtainAllPrivilege,
+			ObtainUserPrivilege:     matrix.ObtainUserPrivilege,
+			ObtainOtherPrivilege:    matrix.ObtainOtherPrivilege,
+			UserInteractionRequired: matrix.UserInteractionRequired,
+			PublishedDate:           pubdate,
+			LastModifiedData:        lastModifiedDate,
+		}
 	}
 
 	if db := m.DB.Save(cve); db.Error != nil {

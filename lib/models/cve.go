@@ -2,10 +2,11 @@ package models
 
 import (
 	"encoding/json"
-	"github.com/jinzhu/gorm/dialects/postgres"
-	"github.com/pkg/errors"
 	"strings"
 	"time"
+
+	"github.com/jinzhu/gorm/dialects/postgres"
+	"github.com/pkg/errors"
 )
 
 type CVEYearFile struct {
@@ -201,6 +202,33 @@ type BaseMetricV2 struct {
 	UserInteractionRequired bool    `json:"userInteractionRequired"`
 }
 
+type CvssV3 struct {
+	Version               string  `json:"version"`
+	VectorString          string  `json:"vectorString"`
+	AttackVector          string  `json:"attackVector"`
+	AttackComplexity      string  `json:"attackComplexity"`
+	PrivilegesRequired    string  `json:"privilegesRequired"`
+	UserInteraction       string  `json:"userInteraction"`
+	Scope                 string  `json:"scope"`
+	ConfidentialityImpact string  `json:"confidentialityImpact"`
+	IntegrityImpact       string  `json:"integrityImpact"`
+	AvailabilityImpact    string  `json:"availabilityImpact"`
+	BaseScore             float64 `json:"baseScore"`
+	BaseSeverity          string  `json:"baseSeverity"`
+}
+
+type BaseMetricV3 struct {
+	CvssV3                  CvssV3  `json:"cvssV3"`
+	Severity                string  `json:"severity"`
+	ExploitabilityScore     float64 `json:"exploitabilityScore"`
+	ImpactScore             float64 `json:"impactScore"`
+	ObtainAllPrivilege      bool    `json:"obtainAllPrivilege"`
+	ObtainUserPrivilege     bool    `json:"obtainUserPrivilege"`
+	ObtainOtherPrivilege    bool    `json:"obtainOtherPrivilege"`
+	UserInteractionRequired bool    `json:"userInteractionRequired"`
+}
+
 type Impact struct {
 	BaseMetricV2 BaseMetricV2 `json:"baseMetricV2"`
+	BaseMetricV3 BaseMetricV3 `json:"baseMetricV3"`
 }
